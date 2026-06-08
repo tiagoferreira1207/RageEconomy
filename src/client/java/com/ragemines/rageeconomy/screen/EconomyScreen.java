@@ -81,6 +81,9 @@ public class EconomyScreen extends Screen {
     private TextFieldWidget worldSearch;
     private double          worldsScroll    = 0;
     private int             worldsTotalH    = 0;
+    private boolean         scrollbarDragging = false;
+    private double          scrollbarDragStartY = 0;
+    private double          scrollbarDragStartScroll = 0;
     private Map<String, List<WorldItem>> worldBuckets = new LinkedHashMap<>();
 
     // ─── Layout ────────────────────────────────────────────────────────────────
@@ -794,9 +797,54 @@ public class EconomyScreen extends Screen {
                 recomputeWorldBuckets();
                 return true;
             }
+
+            // Scrollbar click — start drag or jump to clicked position
+            int scrollAreaTop = contentY + 20;
+            int scrollAreaH   = py + ph - scrollAreaTop - 4;
+            int cw2 = pw - 12;
+            int sbX = px + 6 + cw2 - 5;
+            if (worldsTotalH > scrollAreaH && imx >= sbX && imx <= sbX + 5
+                    && imy >= scrollAreaTop && imy <= scrollAreaTop + scrollAreaH) {
+                int sbH    = scrollAreaH;
+                int thumbH = Math.max(20, sbH * sbH / worldsTotalH);
+                int thumbY = scrollAreaTop + (int) ((double) worldsScroll * (sbH - thumbH) / (worldsTotalH - scrollAreaH));
+                if (imy >= thumbY && imy <= thumbY + thumbH) {
+                    // Clicked on thumb — start dragging
+                    scrollbarDragging = true;
+                    scrollbarDragStartY = my;
+                    scrollbarDragStartScroll = worldsScroll;
+                } else {
+                    // Clicked on track — jump scroll so thumb centers on click
+                    double ratio = (double)(imy - scrollAreaTop - thumbH / 2) / (sbH - thumbH);
+                    double maxScroll = worldsTotalH - scrollAreaH;
+                    worldsScroll = Math.max(0, Math.min(maxScroll, ratio * maxScroll));
+                }
+                return true;
+            }
         }
 
         return super.mouseClicked(click, wasDragging);
+    }
+
+    @Override
+    public boolean mouseDragged(Click click, double dx, double dy) {
+        if (scrollbarDragging && click.button() == 0 && activeTab == TAB_WORLDS) {
+            int scrollAreaTop = contentY + 20;
+            int scrollAreaH   = py + ph - scrollAreaTop - 4;
+            int thumbH = Math.max(20, scrollAreaH * scrollAreaH / Math.max(1, worldsTotalH));
+            double trackH = scrollAreaH - thumbH;
+            double maxScroll = Math.max(0, worldsTotalH - scrollAreaH);
+            double delta = (click.y() - scrollbarDragStartY) / trackH * maxScroll;
+            worldsScroll = Math.max(0, Math.min(maxScroll, scrollbarDragStartScroll + delta));
+            return true;
+        }
+        return super.mouseDragged(click, dx, dy);
+    }
+
+    @Override
+    public boolean mouseReleased(Click click) {
+        if (click.button() == 0) scrollbarDragging = false;
+        return super.mouseReleased(click);
     }
 
     @Override
