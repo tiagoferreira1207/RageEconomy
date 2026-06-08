@@ -128,13 +128,14 @@ public class EconomyScreen extends Screen {
         // ── Tab buttons ──────────────────────────────────────────────────────
         String[] labels = {"Dashboard", "Item Trend", "Prices by World"};
         int[] tabWidths  = {96, 90, 120};
-        int tx = px + 4;
+        int tabX = px + 4; // accumulate x instead of i*(tw+4) which used wrong step
         for (int i = 0; i < 3; i++) {
             final int tab = i;
             int tw = tabWidths[i];
             addDrawableChild(ButtonWidget.builder(Text.literal(labels[i]), btn -> switchTab(tab))
-                .dimensions(tx + i * (tw + 4), py + 27, tw, 18)
+                .dimensions(tabX, py + 27, tw, 18)
                 .build());
+            tabX += tw + 4;
         }
 
         // ── Close button ─────────────────────────────────────────────────────
@@ -149,12 +150,12 @@ public class EconomyScreen extends Screen {
         itemSearchField.setPlaceholder(Text.literal("Type to search..."));
         itemSearchField.setChangedListener(s -> onItemSearch(s));
 
-        startDateField = new TextFieldWidget(textRenderer, px + 310, fy, 76, 14, Text.literal(""));
+        startDateField = new TextFieldWidget(textRenderer, px + 326, fy, 76, 14, Text.literal(""));
         startDateField.setMaxLength(10);
         startDateField.setPlaceholder(Text.literal("YYYY-MM-DD"));
         startDateField.setChangedListener(s -> { if (!updatingDateFields) runLookup(); });
 
-        endDateField = new TextFieldWidget(textRenderer, px + 400, fy, 76, 14, Text.literal(""));
+        endDateField = new TextFieldWidget(textRenderer, px + 416, fy, 76, 14, Text.literal(""));
         endDateField.setMaxLength(10);
         endDateField.setPlaceholder(Text.literal("YYYY-MM-DD"));
         endDateField.setChangedListener(s -> { if (!updatingDateFields) runLookup(); });
@@ -220,12 +221,13 @@ public class EconomyScreen extends Screen {
         ctx.fill(px, py + 26, px + pw, contentY, C_BG2);
         // Active tab highlight under the active tab button area
         int[] tabWidths = {96, 90, 120};
-        int tx = px + 4;
+        int tabHlX = px + 4;
         for (int i = 0; i < 3; i++) {
             int tw = tabWidths[i];
             if (i == activeTab) {
-                ctx.fill(tx + i * (tw + 4), py + 27, tx + i * (tw + 4) + tw, contentY, C_TAB_ACT);
+                ctx.fill(tabHlX, py + 27, tabHlX + tw, contentY, C_TAB_ACT);
             }
+            tabHlX += tw + 4;
         }
 
         // Content area
@@ -306,7 +308,8 @@ public class EconomyScreen extends Screen {
         if (dash.world_volumes != null && !dash.world_volumes.isEmpty()) {
             int maxVol = dash.world_volumes.values().stream().mapToInt(Integer::intValue).max().orElse(1);
             int barH = 8;
-            int barMaxW = cw - 80;
+            int numColW  = 38; // reserved width for the volume number on the right
+            int barMaxW  = cw - 80 - numColW - 4; // bars end before the number column
             for (String world : WORLD_ORDER) {
                 Integer vol = dash.world_volumes.get(world);
                 if (vol == null || vol == 0) continue;
@@ -314,7 +317,9 @@ public class EconomyScreen extends Screen {
                 ctx.drawText(textRenderer, world, cx, cy + 1, C_TEXT_DIM, false);
                 ctx.fill(cx + 70, cy, cx + 70 + barW, cy + barH, C_ACCENT);
                 ctx.fill(cx + 70 + barW, cy, cx + 70 + barMaxW, cy + barH, 0x22FFFFFF);
-                ctx.drawText(textRenderer, fmt(vol), cx + 70 + barMaxW + 4, cy + 1, C_TEXT_DIM, false);
+                String numStr = fmt(vol);
+                int numX = cx + cw - textRenderer.getWidth(numStr); // right-align within panel
+                ctx.drawText(textRenderer, numStr, numX, cy + 1, C_TEXT_DIM, false);
                 cy += barH + 4;
             }
         }
@@ -420,12 +425,15 @@ public class EconomyScreen extends Screen {
             ctx.drawText(textRenderer, "x", cx + 218, cy + 3, C_TEXT_DIM, false);
         }
 
-        ctx.drawText(textRenderer, "From:", cx + 288, cy + 3, C_TEXT_DIM, false);
-        ctx.drawText(textRenderer, "To:", cx + 390, cy + 3, C_TEXT_DIM, false);
+        // Labels positioned flush-right just before each field so they're never clipped
+        int fromLblX = startDateField.getX() - textRenderer.getWidth("From:") - 3;
+        int toLblX   = endDateField.getX()   - textRenderer.getWidth("To:")   - 3;
+        ctx.drawText(textRenderer, "From:", fromLblX, cy + 3, C_TEXT_DIM, false);
+        ctx.drawText(textRenderer, "To:",   toLblX,   cy + 3, C_TEXT_DIM, false);
 
-        // Include trades checkbox
+        // Include trades checkbox — placed after the end-date field
         boolean chk = includeTrades;
-        int cbx = cx + 482, cby = cy + 2;
+        int cbx = endDateField.getX() + endDateField.getWidth() + 8, cby = cy + 2;
         ctx.fill(cbx, cby, cbx + 9, cby + 9, C_BTN);
         drawBorder(ctx, cbx, cby, 9, 9, C_BORDER);
         if (chk) ctx.drawText(textRenderer, "x", cbx + 1, cby, C_ACCENT, false);
@@ -601,8 +609,9 @@ public class EconomyScreen extends Screen {
         if (worldsTrades) ctx.drawText(textRenderer, "x", cbx + 1, cby, C_ACCENT, false);
         ctx.drawText(textRenderer, "Trades", cbx + 12, cy + 3, C_TEXT_DIM, false);
 
-        // World search field rendered by super.render
-        ctx.drawText(textRenderer, "Search:", px + pw - 134, cy + 3, C_TEXT_DIM, false);
+        // World search field rendered by super.render — label flush-left of the field
+        int searchLblX = worldSearch.getX() - textRenderer.getWidth("Search:") - 3;
+        ctx.drawText(textRenderer, "Search:", searchLblX, cy + 3, C_TEXT_DIM, false);
         cy += 20;
 
         // ── Scrollable world cards ────────────────────────────────────────────
@@ -728,8 +737,8 @@ public class EconomyScreen extends Screen {
                 return true;
             }
 
-            // Include trades checkbox
-            int cbx = cx + 482, cby = cy + 2;
+            // Include trades checkbox — position mirrors drawItemTrend
+            int cbx = endDateField.getX() + endDateField.getWidth() + 8, cby = cy + 2;
             if (imx >= cbx && imx <= cbx + 9 && imy >= cby && imy <= cby + 9) {
                 includeTrades = !includeTrades;
                 runLookup();
