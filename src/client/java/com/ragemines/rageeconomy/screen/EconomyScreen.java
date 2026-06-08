@@ -54,7 +54,8 @@ public class EconomyScreen extends Screen {
     private int activeTab = TAB_DASHBOARD;
 
     // Dashboard
-    private String dashDays = "14";
+    private String dashDays   = "14";
+    private int    dashButtonY = -1; // Y of time-range buttons, set during drawDashboard
 
     // Item Trend
     private TextFieldWidget itemSearchField;
@@ -159,6 +160,12 @@ public class EconomyScreen extends Screen {
         worldSearch.setPlaceholder(Text.literal("Search items..."));
         worldSearch.setChangedListener(s -> { worldsScroll = 0; recomputeWorldBuckets(); });
 
+        // Always register all text-field widgets; visibility is toggled each frame
+        addDrawableChild(itemSearchField);
+        addDrawableChild(startDateField);
+        addDrawableChild(endDateField);
+        addDrawableChild(worldSearch);
+
         // Start loading data
         if (data == null) {
             loading = true;
@@ -184,8 +191,6 @@ public class EconomyScreen extends Screen {
                 return null;
             });
         }
-
-        syncTabWidgets();
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -246,6 +251,14 @@ public class EconomyScreen extends Screen {
             case TAB_WORLDS     -> drawWorldsTab(ctx, mx, my);
         }
 
+        // Show/hide text-field widgets based on the active tab (fixes cross-tab leak)
+        boolean isItemTab   = activeTab == TAB_ITEM_TREND;
+        boolean isWorldsTab = activeTab == TAB_WORLDS;
+        itemSearchField.visible = isItemTab;
+        startDateField.visible  = isItemTab;
+        endDateField.visible    = isItemTab;
+        worldSearch.visible     = isWorldsTab;
+
         // Draw child widgets (buttons, text fields)
         super.render(ctx, mx, my, delta);
 
@@ -303,6 +316,7 @@ public class EconomyScreen extends Screen {
 
         // ── Daily Activity chart ──────────────────────────────────────────────
         ctx.drawText(textRenderer, "Daily Activity", cx, cy, C_TEXT, false);
+        dashButtonY = cy; // record for click detection
         // Time range buttons
         String[] dOpts = {"7", "14", "30", "90", "all"};
         String[] dLabels = {"7d", "14d", "30d", "90d", "All"};
@@ -672,13 +686,10 @@ public class EconomyScreen extends Screen {
         int imx = (int) mx, imy = (int) my;
 
         // Dashboard time range buttons
-        if (activeTab == TAB_DASHBOARD && data != null) {
+        if (activeTab == TAB_DASHBOARD && data != null && dashButtonY >= 0) {
             String[] dOpts   = {"7", "14", "30", "90", "all"};
             String[] dLabels = {"7d", "14d", "30d", "90d", "All"};
-            EconomyData.Dashboard dash = data.dashboard;
-            // Find the Y position of chart controls (roughly contentY + 66 for 3 world bars visible)
-            // We track by checking on a horizontal strip near top of dash content
-            int cy = contentY + 58 + (dash.world_volumes != null ? dash.world_volumes.size() : 0) * 12 + 6;
+            int cy = dashButtonY;
             int bx = px + 6 + 100;
             for (int i = 0; i < dOpts.length; i++) {
                 int bw = textRenderer.getWidth(dLabels[i]) + 8;
@@ -815,24 +826,9 @@ public class EconomyScreen extends Screen {
     //  HELPERS
     // ══════════════════════════════════════════════════════════════════════════
     private void switchTab(int tab) {
-        activeTab = tab;
+        activeTab    = tab;
         dropdownOpen = false;
-        syncTabWidgets();
-    }
-
-    private void syncTabWidgets() {
-        // Only add the relevant widgets to avoid them being drawn in other tabs
-        // We manage visibility by adding/removing from children list based on active tab
-        // Simpler: just always have them, but only render when needed
-        // We add them in init and manage focus here
-        if (activeTab == TAB_ITEM_TREND) {
-            if (!children().contains(itemSearchField)) addDrawableChild(itemSearchField);
-            if (!children().contains(startDateField))  addDrawableChild(startDateField);
-            if (!children().contains(endDateField))    addDrawableChild(endDateField);
-        }
-        if (activeTab == TAB_WORLDS) {
-            if (!children().contains(worldSearch)) addDrawableChild(worldSearch);
-        }
+        setFocused(null);
     }
 
     private void onItemSearch(String text) {
@@ -971,6 +967,13 @@ public class EconomyScreen extends Screen {
         }
         for (String world : WORLD_ORDER) {
             if (buckets.containsKey(world)) worldBuckets.put(world, buckets.get(world));
+        }
+
+        // Pre-compute total height so scroll works correctly on the first rendered frame
+        // Each world card = 24 + items*10 + 4 px, plus 4px gap
+        worldsTotalH = 0;
+        for (List<WorldItem> items : worldBuckets.values()) {
+            worldsTotalH += 24 + items.size() * 10 + 4 + 4;
         }
     }
 
