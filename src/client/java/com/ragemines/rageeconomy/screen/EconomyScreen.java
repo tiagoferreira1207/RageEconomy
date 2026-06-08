@@ -70,6 +70,8 @@ public class EconomyScreen extends Screen {
     private boolean         dropdownOpen    = false;
     private int             dropdownScroll  = 0;
     private boolean         updatingSearchField = false; // guard against recursive onItemSearch
+    private boolean         updatingDateFields  = false; // guard against triple runLookup on preset click
+    private String          itemTrendDays       = "30"; // active date-preset for highlight
     private ItemStats       currentStats    = null;
     private List<WeekPt>    currentSeries   = null;
 
@@ -150,12 +152,12 @@ public class EconomyScreen extends Screen {
         startDateField = new TextFieldWidget(textRenderer, px + 310, fy, 76, 14, Text.literal(""));
         startDateField.setMaxLength(10);
         startDateField.setPlaceholder(Text.literal("YYYY-MM-DD"));
-        startDateField.setChangedListener(s -> runLookup());
+        startDateField.setChangedListener(s -> { if (!updatingDateFields) runLookup(); });
 
         endDateField = new TextFieldWidget(textRenderer, px + 400, fy, 76, 14, Text.literal(""));
         endDateField.setMaxLength(10);
         endDateField.setPlaceholder(Text.literal("YYYY-MM-DD"));
-        endDateField.setChangedListener(s -> runLookup());
+        endDateField.setChangedListener(s -> { if (!updatingDateFields) runLookup(); });
 
         // ── Worlds search widget ──────────────────────────────────────────────
         worldSearch = new TextFieldWidget(textRenderer, px + pw - 128, contentY + 5, 120, 14, Text.literal(""));
@@ -436,10 +438,11 @@ public class EconomyScreen extends Screen {
         String[] dLabels = {"7d", "14d", "30d", "All"};
         int bx = cx;
         for (int i = 0; i < dOpts.length; i++) {
+            boolean act = itemTrendDays.equals(dOpts[i]);
             int bw = textRenderer.getWidth(dLabels[i]) + 8;
-            ctx.fill(bx, cy, bx + bw, cy + 12, C_BTN);
-            drawBorder(ctx, bx, cy, bw, 12, C_BORDER);
-            ctx.drawText(textRenderer, dLabels[i], bx + 4, cy + 2, C_TEXT_DIM, false);
+            ctx.fill(bx, cy, bx + bw, cy + 12, act ? C_BTN_ACT : C_BTN);
+            drawBorder(ctx, bx, cy, bw, 12, act ? C_ACCENT : C_BORDER);
+            ctx.drawText(textRenderer, dLabels[i], bx + 4, cy + 2, act ? C_ACCENT : C_TEXT_DIM, false);
             bx += bw + 4;
         }
         cy += 16;
@@ -499,18 +502,28 @@ public class EconomyScreen extends Screen {
             return;
         }
 
-        ctx.fill(cx, cy, cx + chartW, cy + chartH, C_CARD);
-        drawBorder(ctx, cx, cy, chartW, chartH, C_BORDER);
-
-        ctx.enableScissor(cx, cy, cx + chartW, cy + chartH);
-
         int n = currentSeries.size();
         double minVal = currentSeries.stream().mapToDouble(p -> p.median).min().orElse(0);
         double maxVal = currentSeries.stream().mapToDouble(p -> p.median).max().orElse(1);
         if (maxVal == minVal) { maxVal = minVal + 1; }
         double range = maxVal - minVal;
 
-        int innerL = cx + 8, innerT = cy + 4, innerW = chartW - 16, innerH = chartH - 16;
+        // Reserve left margin for Y-axis labels so they don't overlap the chart line
+        String yTopLabel = "$" + fmtPpi(maxVal);
+        String yBotLabel = "$" + fmtPpi(minVal);
+        int yLabelW = Math.max(textRenderer.getWidth(yTopLabel), textRenderer.getWidth(yBotLabel)) + 4;
+
+        ctx.fill(cx, cy, cx + chartW, cy + chartH, C_CARD);
+        drawBorder(ctx, cx, cy, chartW, chartH, C_BORDER);
+
+        // Y-axis labels drawn outside the scissor region (left margin), no overlap with chart
+        ctx.drawText(textRenderer, yTopLabel, cx + 2, cy + 4,           C_TEXT_DIM, false);
+        ctx.drawText(textRenderer, yBotLabel, cx + 2, cy + chartH - 16, C_TEXT_DIM, false);
+
+        ctx.enableScissor(cx, cy, cx + chartW, cy + chartH);
+
+        // innerL pushed right by the Y-label margin so chart line never touches labels
+        int innerL = cx + yLabelW, innerT = cy + 4, innerW = chartW - yLabelW - 8, innerH = chartH - 16;
 
         for (int i = 1; i < n; i++) {
             int x1 = innerL + (i - 1) * innerW / (n - 1);
@@ -528,15 +541,11 @@ public class EconomyScreen extends Screen {
             ctx.fill(x0 - 1, y0 - 1, x0 + 2, y0 + 2, C_ACCENT);
         }
 
-        // Axis labels
+        // X-axis labels (dates)
         String sFirst = currentSeries.get(0).date.substring(5);
         String sLast  = currentSeries.get(n - 1).date.substring(5);
         ctx.drawText(textRenderer, sFirst, innerL, cy + chartH - 10, C_TEXT_DIM, false);
         ctx.drawText(textRenderer, sLast, innerL + innerW - textRenderer.getWidth(sLast), cy + chartH - 10, C_TEXT_DIM, false);
-
-        // Y axis labels
-        ctx.drawText(textRenderer, "$" + fmtPpi(maxVal), cx + 2, innerT, C_TEXT_DIM, false);
-        ctx.drawText(textRenderer, "$" + fmtPpi(minVal), cx + 2, innerT + innerH - 8, C_TEXT_DIM, false);
 
         // Mouse hover tooltip
         if (mx >= cx && mx <= cx + chartW && my >= cy && my <= cy + chartH && n >= 2) {
@@ -653,14 +662,14 @@ public class EconomyScreen extends Screen {
         worldsTotalH = drawY - scrollAreaTop + (int) worldsScroll;
         ctx.disableScissor();
 
-        // Scrollbar
+        // Scrollbar — drawn inside the right edge of the content area
         if (worldsTotalH > scrollAreaH) {
-            int sbX  = cx + cw + 2;
+            int sbX  = cx + cw - 5; // 5 px wide, flush with right edge inside the panel
             int sbH  = scrollAreaH;
             int thumbH = Math.max(20, sbH * sbH / worldsTotalH);
             int thumbY = scrollAreaTop + (int) ((double) worldsScroll * (sbH - thumbH) / (worldsTotalH - scrollAreaH));
-            ctx.fill(sbX, scrollAreaTop, sbX + 4, scrollAreaTop + sbH, 0x22FFFFFF);
-            ctx.fill(sbX, thumbY, sbX + 4, thumbY + thumbH, C_BORDER);
+            ctx.fill(sbX, scrollAreaTop, sbX + 5, scrollAreaTop + sbH, 0x22FFFFFF);
+            ctx.fill(sbX, thumbY, sbX + 5, thumbY + thumbH, C_BORDER);
         }
     }
 
@@ -678,7 +687,7 @@ public class EconomyScreen extends Screen {
         if (activeTab == TAB_ITEM_TREND && dropdownOpen) {
             int ddX = px + 64, ddY = contentY + 20;
             int ddW = 148, maxRows = Math.min(filteredItems.size() - dropdownScroll, 8);
-            int ddH = maxRows * 11;
+            int ddH = maxRows * 11 + 2; // +2 matches the drawn height in drawDropdown
             if (mx >= ddX && mx <= ddX + ddW && my >= ddY && my <= ddY + ddH) {
                 int idx = (int) ((my - ddY) / 11) + dropdownScroll;
                 if (idx >= 0 && idx < filteredItems.size()) {
@@ -735,12 +744,16 @@ public class EconomyScreen extends Screen {
             for (int i = 0; i < dOpts.length; i++) {
                 int bw = textRenderer.getWidth(dLabels[i]) + 8;
                 if (imx >= bx && imx <= bx + bw && imy >= cy && imy <= cy + 12 && data != null && data.generated_at != null) {
-                    String end = data.generated_at;
+                    itemTrendDays = dOpts[i];
+                    String end   = data.generated_at;
                     String start = dOpts[i].equals("all") ? (data.earliest_date != null ? data.earliest_date : end)
                         : subtractDays(end, Integer.parseInt(dOpts[i]) - 1);
+                    // Guard prevents the two setText calls from each firing runLookup via onChanged
+                    updatingDateFields = true;
                     startDateField.setText(start);
                     endDateField.setText(end);
-                    runLookup();
+                    updatingDateFields = false;
+                    runLookup(); // single authoritative call
                     return true;
                 }
                 bx += bw + 4;
@@ -879,7 +892,7 @@ public class EconomyScreen extends Screen {
     }
 
     private void runLookup() {
-        if (data == null || selectedItem == null) return;
+        if (data == null || data.items == null || selectedItem == null) return;
         EconomyData.Item item = data.items.stream()
             .filter(it -> it.name.equals(selectedItem))
             .findFirst().orElse(null);
@@ -888,7 +901,7 @@ public class EconomyScreen extends Screen {
         String start = startDateField.getText().trim();
         String end   = endDateField.getText().trim();
         currentStats  = computeItemStats(item, start, end, includeTrades);
-        currentSeries = computeWeeklySeries(item, includeTrades);
+        currentSeries = computeWeeklySeries(item, start, end, includeTrades);
     }
 
     private ItemStats computeItemStats(EconomyData.Item item, String start, String end, boolean trades) {
@@ -921,11 +934,13 @@ public class EconomyScreen extends Screen {
         return st;
     }
 
-    private List<WeekPt> computeWeeklySeries(EconomyData.Item item, boolean trades) {
+    private List<WeekPt> computeWeeklySeries(EconomyData.Item item, String start, String end, boolean trades) {
         if (item.sales == null) return new ArrayList<>();
         Map<String, List<Double>> grouped = new TreeMap<>();
         for (EconomyData.Sale s : item.sales) {
             if (!trades && "trade".equals(s.s)) continue;
+            if (!start.isEmpty() && s.d.compareTo(start) < 0) continue;
+            if (!end.isEmpty()   && s.d.compareTo(end)   > 0) continue;
             grouped.computeIfAbsent(weekStart(s.d), k -> new ArrayList<>()).add(s.ppi);
         }
         List<WeekPt> result = new ArrayList<>();
@@ -942,7 +957,7 @@ public class EconomyScreen extends Screen {
     }
 
     private void recomputeWorldBuckets() {
-        if (data == null || data.items == null) return;
+        if (data == null || data.items == null) { worldBuckets = new LinkedHashMap<>(); return; }
         worldBuckets = new LinkedHashMap<>();
 
         String minDate = null;
