@@ -3,10 +3,12 @@ package com.ragemines.rageeconomy.screen;
 import com.ragemines.rageeconomy.data.EconomyData;
 import com.ragemines.rageeconomy.data.EconomyDataLoader;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.client.input.KeyInput;
 import net.minecraft.text.Text;
 
 import java.time.LocalDate;
@@ -663,9 +665,12 @@ public class EconomyScreen extends Screen {
     // ══════════════════════════════════════════════════════════════════════════
     //  MOUSE & KEYBOARD
     // ══════════════════════════════════════════════════════════════════════════
+    // Minecraft 1.21.11: mouseClicked now receives a Click record
     @Override
-    public boolean mouseClicked(double mx, double my, int btn) {
-        if (btn != 0) return super.mouseClicked(mx, my, btn);
+    public boolean mouseClicked(Click click, boolean wasDragging) {
+        double mx = click.x(), my = click.y();
+        int btn = click.button();
+        if (btn != 0) return super.mouseClicked(click, wasDragging);
 
         // Dropdown pick
         if (activeTab == TAB_ITEM_TREND && dropdownOpen) {
@@ -767,7 +772,7 @@ public class EconomyScreen extends Screen {
             }
         }
 
-        return super.mouseClicked(mx, my, btn);
+        return super.mouseClicked(click, wasDragging);
     }
 
     @Override
@@ -786,14 +791,15 @@ public class EconomyScreen extends Screen {
         return super.mouseScrolled(mx, my, hAmt, vAmt);
     }
 
+    // Minecraft 1.21.11: keyPressed now receives a KeyInput record
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == 256) { // Escape
+    public boolean keyPressed(KeyInput input) {
+        if (input.key() == 256) { // GLFW_KEY_ESCAPE
             if (dropdownOpen) { dropdownOpen = false; return true; }
             close();
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(input);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
