@@ -1,5 +1,5 @@
 plugins {
-	id 'net.fabricmc.fabric-loom' version '1.6.12'
+	id 'fabric-loom' version '1.7.4'
 	id 'maven-publish'
 }
 
@@ -17,6 +17,17 @@ dependencies {
 	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
 	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+}
+
+// Include client sources alongside the main sources
+loom {
+	splitEnvironmentSourceSets()
+	mods {
+		"rageeconomy" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
 }
 
 processResources {
