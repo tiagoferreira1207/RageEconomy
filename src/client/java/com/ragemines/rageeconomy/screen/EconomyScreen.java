@@ -228,6 +228,15 @@ public class EconomyScreen extends Screen {
         // Content area
         ctx.fill(px, contentY, px + pw, py + ph, C_PANEL);
 
+        // Always hide text-field widgets that belong to other tabs — must happen
+        // before super.render() on EVERY path, including loading/error states.
+        boolean isItemTab   = activeTab == TAB_ITEM_TREND;
+        boolean isWorldsTab = activeTab == TAB_WORLDS;
+        itemSearchField.visible = isItemTab;
+        startDateField.visible  = isItemTab;
+        endDateField.visible    = isItemTab;
+        worldSearch.visible     = isWorldsTab;
+
         // Loading / error state
         if (loading) {
             String msg = "Loading economy data...";
@@ -252,14 +261,6 @@ public class EconomyScreen extends Screen {
             case TAB_ITEM_TREND -> drawItemTrend(ctx, mx, my);
             case TAB_WORLDS     -> drawWorldsTab(ctx, mx, my);
         }
-
-        // Show/hide text-field widgets based on the active tab (fixes cross-tab leak)
-        boolean isItemTab   = activeTab == TAB_ITEM_TREND;
-        boolean isWorldsTab = activeTab == TAB_WORLDS;
-        itemSearchField.visible = isItemTab;
-        startDateField.visible  = isItemTab;
-        endDateField.visible    = isItemTab;
-        worldSearch.visible     = isWorldsTab;
 
         // Draw child widgets (buttons, text fields)
         super.render(ctx, mx, my, delta);
@@ -656,7 +657,7 @@ public class EconomyScreen extends Screen {
             int sbX  = cx + cw + 2;
             int sbH  = scrollAreaH;
             int thumbH = Math.max(20, sbH * sbH / worldsTotalH);
-            int thumbY = scrollAreaTop + (int) (worldsScroll * (sbH - thumbH) / (worldsTotalH - scrollAreaH));
+            int thumbY = scrollAreaTop + (int) ((double) worldsScroll * (sbH - thumbH) / (worldsTotalH - scrollAreaH));
             ctx.fill(sbX, scrollAreaTop, sbX + 4, scrollAreaTop + sbH, 0x22FFFFFF);
             ctx.fill(sbX, thumbY, sbX + 4, thumbY + thumbH, C_BORDER);
         }

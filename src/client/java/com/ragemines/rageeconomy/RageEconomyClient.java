@@ -8,8 +8,6 @@ import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import org.lwjgl.glfw.GLFW;
 
-// Minecraft 1.21.11: KeyBinding category is now a typed object, not a String
-
 public class RageEconomyClient implements ClientModInitializer {
 
     public static KeyBinding economyKey;
