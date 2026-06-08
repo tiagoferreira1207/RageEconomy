@@ -69,6 +69,7 @@ public class EconomyScreen extends Screen {
     private List<String>    filteredItems   = new ArrayList<>();
     private boolean         dropdownOpen    = false;
     private int             dropdownScroll  = 0;
+    private boolean         updatingSearchField = false; // guard against recursive onItemSearch
     private ItemStats       currentStats    = null;
     private List<WeekPt>    currentSeries   = null;
 
@@ -839,6 +840,7 @@ public class EconomyScreen extends Screen {
     }
 
     private void onItemSearch(String text) {
+        if (updatingSearchField) return; // prevent recursive loop when selectItem sets text
         String q = text.toLowerCase().trim();
         filteredItems = q.isEmpty()
             ? new ArrayList<>(allItemNames)
@@ -858,7 +860,9 @@ public class EconomyScreen extends Screen {
 
     private void selectItem(String name) {
         selectedItem = name;
+        updatingSearchField = true;
         itemSearchField.setText(name);
+        updatingSearchField = false;
         dropdownOpen  = false;
         dropdownScroll = 0;
         runLookup();
@@ -868,7 +872,9 @@ public class EconomyScreen extends Screen {
         selectedItem  = null;
         currentStats  = null;
         currentSeries = null;
+        updatingSearchField = true;
         itemSearchField.setText("");
+        updatingSearchField = false;
         dropdownOpen  = false;
     }
 
